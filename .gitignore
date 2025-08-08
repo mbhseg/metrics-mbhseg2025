@@ -1,0 +1,142 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.uv/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Medical imaging data files (large binary files)
+*.nii
+*.nii.gz
+*.dcm
+*.dicom
+*.img
+*.hdr
+
+# Results and output files
+*_results.txt
+*_performance_results.txt
+diverse_performance_results.txt
+personalized_performance_results.txt
+*.log
+*.csv
+outputs/
+results/
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp_*
+tmp_*
+
+# Model files and weights (usually large)
+*.pth
+*.pt
+*.h5
+*.pkl
+*.pickle
+*.joblib
+*.model
+checkpoints/
+models/
+
+# Data directories (avoid committing large datasets)
+data/
+datasets/
+raw_data/
+processed_data/
+annotations/
+predictions/
+ground_truth/
+test_data/
+ID_*/
+
+# Configuration files with sensitive information
+.env.local
+.env.production
+config_local.py
+secrets.yaml
+credentials.json
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+.dockerignore.local
+CLAUDE.md
