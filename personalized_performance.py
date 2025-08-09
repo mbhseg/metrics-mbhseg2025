@@ -7,6 +7,8 @@ from tqdm import tqdm
 from metrics_set import *
 from auto_config import get_auto_config
 
+from metrics_set import DEVICE
+
 
 def evaluate_personalized_performance(predictions_path, ground_truth_path, output_path=None,
                                      pred_pattern="pred_s", gt_pattern="label_annot_",
@@ -34,6 +36,14 @@ def evaluate_personalized_performance(predictions_path, ground_truth_path, outpu
     Returns:
         Dictionary containing personalized performance metrics
     """
+    
+    # Check if predictions_path is a file instead of directory
+    if os.path.isfile(predictions_path):
+        raise ValueError(
+            f"❌ Detected file path instead of directory: {predictions_path}\n"
+            f"💡 Solution: Please use --auto_config parameter for automatic configuration\n"
+            f"   Example: python personalized_performance.py --pred_path {predictions_path} --gt_path {ground_truth_path} --auto_config"
+        )
     
     # Auto-detect file patterns and counts
     pred_all_files = os.listdir(predictions_path)
@@ -120,11 +130,13 @@ def evaluate_personalized_performance(predictions_path, ground_truth_path, outpu
                 masks.append(mask_img)
         
         if len(preds) > 0 and len(masks) > 0:
-            # Convert to tensors
-            preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float()
-            masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float()
+            # Convert to tensors and move to GPU
+            preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float().to(DEVICE)
+            masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float().to(DEVICE)
             
-            # Calculate personalized performance metrics
+            print(f"Using {DEVICE} for GPU acceleration")
+            
+            # Calculate personalized performance metrics - GPU加速
             _, _, _, dice_each_iter = dice_at_all(masks_tensor, preds_tensor, thresh=0.5,
                                                   multiclass=multiclass, num_classes=num_classes,
                                                   exclude_background=exclude_background)
@@ -160,11 +172,11 @@ def evaluate_personalized_performance(predictions_path, ground_truth_path, outpu
                     masks.append(mask_img)
             
             if len(preds) > 0 and len(masks) > 0:
-                # Convert to tensors
-                preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float()
-                masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float()
+                # Convert to tensors and move to GPU
+                preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float().to(DEVICE)
+                masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float().to(DEVICE)
                 
-                # Calculate personalized performance metrics
+                # Calculate personalized performance metrics - GPU加速
                 _, _, _, dice_each_iter = dice_at_all(masks_tensor, preds_tensor, thresh=0.5,
                                                       multiclass=multiclass, num_classes=num_classes,
                                                       exclude_background=exclude_background)
@@ -336,7 +348,7 @@ def main():
     
     # 自动配置检测
     if args.auto_config and not args.kfold:
-        print("🤖 启用自动配置检测...")
+        print("Using automatic configuration detection...")
         auto_config, auto_details = get_auto_config(
             args.pred_path, 
             args.gt_path if args.gt_path else args.pred_path,
@@ -345,36 +357,36 @@ def main():
             verbose=True
         )
         
-        # 使用自动检测的参数
+        # Apply auto-detected configuration to arguments
         args.multiclass = auto_config['multiclass']
         args.num_classes = auto_config['num_classes']
         args.include_background = not auto_config['exclude_background']
         args.pred_pattern = auto_config['pred_pattern']
         args.gt_pattern = auto_config['gt_pattern']
-        
-        # 重要：如果输入是文件路径，使用目录路径进行评估
+
+        # Important: If input is a file path, use directory path for evaluation
         if os.path.isfile(args.pred_path):
             pred_dir = os.path.dirname(args.pred_path)
             if not pred_dir:
                 pred_dir = '.'
             args.pred_path = pred_dir
-            print(f"🔄 输入文件路径已转换为目录路径: {args.pred_path}")
-        
+            print(f"🔄 Input file path has been converted to directory path: {args.pred_path}")
+
         if args.gt_path and os.path.isfile(args.gt_path):
             gt_dir = os.path.dirname(args.gt_path)
             if not gt_dir:
                 gt_dir = '.'
             args.gt_path = gt_dir
-            print(f"🔄 标注文件路径已转换为目录路径: {args.gt_path}")
-        
-        print(f"\n✅ 自动配置已应用:")
+            print(f"🔄 Ground truth file path has been converted to directory path: {args.gt_path}")
+
+        print(f"\n✅ Automatic configuration has been applied:")
         print(f"   multiclass: {args.multiclass}")
         print(f"   num_classes: {args.num_classes}")
         print(f"   exclude_background: {not args.include_background}")
         print(f"   pred_pattern: {args.pred_pattern}")
         print(f"   gt_pattern: {args.gt_pattern}")
-        print()
-    
+        print(f"   output: {args.output}")
+
     if args.kfold:
         # K-fold evaluation mode
         metrics = evaluate_personalized_performance_kfold(args.pred_path, args.num_folds, args.output,

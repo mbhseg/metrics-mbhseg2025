@@ -140,3 +140,8 @@ Dockerfile.local
 docker-compose.override.yml
 .dockerignore.local
 CLAUDE.md
+
+competition_results
+MBH_val_label_2025
+
+utils/

@@ -7,6 +7,8 @@ from tqdm import tqdm
 from metrics_set import *
 from auto_config import get_auto_config
 
+from metrics_set import DEVICE
+
 
 def evaluate_diverse_performance(predictions_path, ground_truth_path, output_path=None, 
                                 pred_pattern="pred_s", gt_pattern="label_annot_",
@@ -36,6 +38,14 @@ def evaluate_diverse_performance(predictions_path, ground_truth_path, output_pat
     Returns:
         Dictionary containing all diverse performance metrics
     """
+    
+    # Check if predictions_path is a file instead of directory
+    if os.path.isfile(predictions_path):
+        raise ValueError(
+            f"❌ 检测到文件路径而非目录路径: {predictions_path}\n"
+            f"💡 解决方案: 请使用 --auto_config 参数进行自动配置\n"
+            f"   示例: python diverse_performance.py --pred_path {predictions_path} --gt_path {ground_truth_path} --auto_config"
+        )
     
     # Auto-detect file patterns and counts
     pred_all_files = os.listdir(predictions_path)
@@ -130,11 +140,13 @@ def evaluate_diverse_performance(predictions_path, ground_truth_path, output_pat
                 masks.append(mask_img)
         
         if len(preds) > 0 and len(masks) > 0:
-            # Convert to tensors
-            preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float()
-            masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float()
+            # Convert to tensors and move to GPU
+            preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float().to(DEVICE)
+            masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float().to(DEVICE)
             
-            # Calculate metrics
+            print(f"📊 使用 {DEVICE} 计算指标...")
+            
+            # Calculate metrics - 所有计算都在GPU上进行
             GED_global = generalized_energy_distance(masks_tensor, preds_tensor, num_classes=num_classes)
             dice_max, dice_max_reverse, dice_match, _ = dice_at_all(masks_tensor, preds_tensor, thresh=0.5,
                                                                      multiclass=multiclass, num_classes=num_classes,
@@ -169,11 +181,11 @@ def evaluate_diverse_performance(predictions_path, ground_truth_path, output_pat
                     masks.append(mask_img)
             
             if len(preds) > 0 and len(masks) > 0:
-                # Convert to tensors
-                preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float()
-                masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float()
+                # Convert to tensors and move to GPU
+                preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float().to(DEVICE)
+                masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float().to(DEVICE)
                 
-                # Calculate diverse performance metrics
+                # Calculate diverse performance metrics - GPU加速
                 GED_iter = generalized_energy_distance(masks_tensor, preds_tensor, num_classes=num_classes)
                 dice_max_iter, dice_max_reverse_iter, dice_match_iter, _ = dice_at_all(masks_tensor, preds_tensor, thresh=0.5,
                                                                                        multiclass=multiclass, num_classes=num_classes,

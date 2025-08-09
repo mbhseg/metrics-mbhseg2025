@@ -1,132 +1,96 @@
-## Project Overview
+# Multi-Rater Medical Image Segmentation Evaluation Toolkit
 
-This is a medical image segmentation evaluation toolkit for multi-rater annotations. The project evaluates segmentation models by comparing predictions against multiple annotator ground truth labels using specialized metrics that account for inter-annotator variability.
+A specialized toolkit for evaluating medical image segmentation models against multiple annotator ground truth labels. This toolkit accounts for inter-annotator variability using advanced set-level similarity metrics.
 
-## Core Components
+## Quick Start
 
-### Main Evaluation Scripts
-- `diverse_performance.py` - Calculates set-level similarity metrics (GED, Dice_max, Dice_match, Dice_soft)
-- `personalized_performance.py` - Evaluates individual expert Dice scores
-- `metrics_set.py` - Core metric computation functions (Dice, IoU, GED calculations)
-
-### Utility Scripts
-- `count_classes.py` - Analyzes unique class labels in NIfTI files
-- `create_test_data.py` - Generates synthetic test predictions from ground truth
-
-## Common Commands
-
-### Install Dependencies
+### 1. Install Dependencies
 ```bash
 uv sync
 ```
 
-### Automatic Configuration (Recommended)
+### 2. Run Batch Evaluation (Easiest Method)
+For evaluating all samples at once:
 ```bash
-# For diverse performance evaluation with auto-detection
-python diverse_performance.py --pred_path /path/to/prediction.nii.gz --gt_path /path/to/annotations/ --auto_config
-
-# For personalized performance evaluation with auto-detection
-python personalized_performance.py --pred_path /path/to/prediction.nii.gz --gt_path /path/to/annotations/ --auto_config
-
-# Auto-config works with both file paths and directory paths
-python diverse_performance.py --pred_path /path/to/predictions/ --auto_config
+python competition_evaluation.py --pred_path predictions/ --gt_path MBH_val_label_2025/
 ```
 
-### Manual Configuration
+### 3. Prepare Your Data
+
+The toolkit automatically detects your data structure and parameters. Simply organize your files and run with `--auto_config`:
+
+#### Option A: Single prediction with multiple annotations
+```
+your_data/
+├── prediction.nii.gz              # Your model's prediction
+└── annotations/                   # Multiple rater annotations
+    ├── label_annot_1.nii.gz
+    ├── label_annot_2.nii.gz
+    └── label_annot_5.nii.gz
+```
+
+#### Option B: ID-based structure (like MBH dataset)
+```
+project/
+├── predictions/
+│   ├── ID_90ae3af3_ID_8d77fcb5d2.nii.gz
+│   ├── ID_066b1fc2_ID_f937d7bff0.nii.gz
+│   └── ID_0219ef88_ID_e5c1a31210.nii.gz
+└── MBH_val_label_2025/
+    ├── ID_90ae3af3_ID_8d77fcb5d2/
+    │   ├── image.nii.gz
+    │   ├── label_annot_1.nii.gz
+    │   └── label_annot_5.nii.gz
+    ├── ID_066b1fc2_ID_f937d7bff0/
+    │   ├── image.nii.gz
+    │   ├── label_annot_1.nii.gz
+    │   └── label_annot_5.nii.gz
+    └── ID_0219ef88_ID_e5c1a31210/
+        ├── image.nii.gz
+        ├── label_annot_1.nii.gz
+        └── label_annot_5.nii.gz
+```
+
+**Note**: Prediction filenames must match the folder names in the labels directory for correct evaluation.
+
+### 4. Basic Usage
+
+For most evaluation needs, simply use:
+
 ```bash
-# Multi-class segmentation with manual parameters
-python diverse_performance.py --pred_path /path/to/predictions --gt_path /path/to/ground_truth --multiclass --num_classes 4
-
-# K-fold cross-validation
-python personalized_performance.py --pred_path /path/to/base --kfold --num_folds 5
-
-# Custom patterns and parameters
-python diverse_performance.py --pred_path /path/to/data --pred_pattern custom_pred_ --gt_pattern custom_gt_ --multiclass --num_classes 6
+python competition_evaluation.py --pred_path /path/to/predictions --gt_path /path/to/annotations
 ```
 
-### Utility Commands
-```bash
-# Count classes in label files
-python count_classes.py
+This command automatically:
+- Detects all prediction files in your predictions directory
+- Matches them with corresponding annotation folders
+- Evaluates using appropriate metrics
+- Handles ID-based naming (like MBH dataset structure)
 
-# Generate synthetic test data
-python create_test_data.py
-```
+## Evaluation Metrics
 
-## File Naming Conventions and Auto-Configuration
+### Diverse Performance Metrics (Set-Level)
+- **GED (Generalized Energy Distance)**: Set-level similarity between prediction and annotation sets
+- **Dice_max**: Maximum Dice score achievable through optimal matching
+- **Dice_match**: Dice score using Hungarian algorithm optimal matching
+- **Dice_soft**: Soft Dice coefficient accounting for all annotation variations
 
-### Automatic Pattern Detection
-The `--auto_config` flag automatically detects file patterns and parameters:
-- **Intelligent pattern inference**: Extracts patterns from actual filenames
-- **Sparse class handling**: Properly handles non-consecutive class indices (e.g., [0, 2, 3])
-- **Directory separation**: Supports predictions and annotations in different directories
-- **Parameter extraction**: Auto-detects num_classes, multiclass mode, and background handling
+### Personalized Performance Metrics
+- **Individual Dice Scores**: Per-annotator Dice coefficients
+- **Statistical Summary**: Mean, standard deviation, min/max across annotators
 
-### Supported File Structures
-```
-# Single prediction file with annotations in subdirectory
-prediction.nii.gz
-annotations_folder/
-  ├── label_annot_1.nii.gz
-  └── label_annot_5.nii.gz
+## Data Format Requirements
 
-# Traditional patterns (also auto-detected)
-pred_s1.nii.gz, pred_s2.nii.gz
-label_annot_1.nii.gz, label_annot_5.nii.gz
+- **File Format**: NIfTI (`.nii.gz`)
+- **Segmentation Maps**: Integer class indices (0, 1, 2, ...) or binary (0, 1)
+- **Spatial Consistency**: All files must have matching dimensions
+- **Class Handling**: Supports sparse class indices (e.g., [0, 2, 5])
+- **ID Matching**: For MBH-style datasets, prediction filenames must exactly match the corresponding annotation folder names
 
-# Custom ID patterns (auto-detected)
-ID_90ae3af3_ID_8d77fcb5d2.nii.gz
-ID_90ae3af3_ID_8d77fcb5d2/
-  ├── label_annot_1.nii.gz
-  └── label_annot_5.nii.gz
-```
 
-### Manual Pattern Override
-Use `--pred_pattern` and `--gt_pattern` when auto-detection fails:
-```bash
-python diverse_performance.py --pred_pattern custom_pred_ --gt_pattern custom_gt_
-```
+## Output
 
-## Architecture Overview
-
-### Core Components
-1. **Evaluation Scripts** (`diverse_performance.py`, `personalized_performance.py`)
-   - Handle command-line arguments and orchestrate evaluation workflows
-   - Support both automatic and manual configuration modes
-   - Manage file discovery and validation across separated prediction/annotation directories
-
-2. **Metrics Engine** (`metrics_set.py`)
-   - `dice_at_all()`: Main function computing Dice variants with Hungarian algorithm optimal matching
-   - `compute_multiclass_dice()`: Multi-class Dice with intelligent format detection and background exclusion
-   - `generalized_energy_distance()`: Set-level similarity using energy distance formulation
-   - Robust error handling for index mismatches and sparse class distributions
-
-3. **Auto-Configuration System** (`auto_config.py`)
-   - `analyze_dataset_automatically()`: Comprehensive dataset analysis and parameter inference
-   - Intelligent file vs directory path handling with automatic pattern extraction
-   - Sparse class detection and num_classes calculation using max_class + 1 methodology
-   - Cross-validation between prediction and annotation compatibility
-
-### Evaluation Methodologies
-- **Diverse Performance**: Set-level metrics (GED, Dice_max, Dice_match, Dice_soft) measuring collective prediction-annotation similarity
-- **Personalized Performance**: Individual expert Dice scores with statistical analysis (mean, std, min/max)
-- **Hungarian Algorithm**: Optimal bipartite matching between predictions and annotations
-- **Multi-rater Analysis**: Accounts for inter-annotator variability in medical segmentation tasks
-
-### Multi-class Handling
-
-#### Class Index Strategy
-- **num_classes calculation**: Uses `max_class + 1` to handle sparse class indices
-- **Example**: Classes [0, 2, 3] → num_classes = 4 (accommodates missing class 1)
-- **Rationale**: Ensures proper one-hot encoding and framework compatibility
-
-#### Background Processing
-- **Default behavior**: Background class (0) excluded from evaluation metrics
-- **Override option**: `--include_background` to include class 0 in calculations
-- **Medical focus**: Aligns with clinical evaluation practices focusing on anatomical structures
-
-### Data Pipeline
-- **NIfTI I/O**: Uses `nibabel` for medical image format handling
-- **Format Detection**: Automatic identification of class indices vs probability distributions
-- **Validation**: Cross-checks prediction-annotation compatibility and spatial consistency
-- **Error Recovery**: Robust handling of missing files, index mismatches, and format inconsistencies
+Final evaluation results for all samples are saved in the `competition_results/` folder:
+- `competition_aggregate_results.json` - Summary metrics across all samples
+- `competition_detailed_results.json` - Detailed per-sample results
+- `competition_report.txt` - Human-readable evaluation report
