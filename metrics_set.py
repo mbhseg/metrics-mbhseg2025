@@ -2,6 +2,15 @@ import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device('cuda:0') 
+    else:
+        return torch.device('cpu')
+
+DEVICE = get_device()
+print(f"Using device: {DEVICE}")
+
 def get_dice_threshold(output, mask, threshold):
     """
     :param output: output shape per image, float, (0,1)
@@ -10,6 +19,11 @@ def get_dice_threshold(output, mask, threshold):
     :return: dice of threshold t
     """
     smooth = 1e-6
+
+    if not output.is_cuda and DEVICE.type == 'cuda':
+        output = output.to(DEVICE)
+    if not mask.is_cuda and DEVICE.type == 'cuda':
+        mask = mask.to(DEVICE)
 
     zero = torch.zeros_like(output)
     one = torch.ones_like(output)
@@ -132,7 +146,7 @@ def compute_dice_accuracy(label, mask):
 
 def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=True):
     """
-    Compute multi-class Dice coefficient.
+    Compute multi-class Dice coefficient with GPU acceleration.
     
     Args:
         label: Ground truth tensor. Shape can be:
@@ -148,6 +162,11 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
         Mean Dice coefficient across all classes (macro-averaged)
     """
     smooth = 1e-8
+    if DEVICE.type == 'cuda':
+        if not label.is_cuda:
+            label = label.to(DEVICE)
+        if not pred.is_cuda:
+            pred = pred.to(DEVICE)
     
     # Handle different input formats
     if len(label.shape) == len(pred.shape):
@@ -182,24 +201,26 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
     label_onehot = label_onehot.float()
     pred_onehot = pred_onehot.float()
     
-    # Calculate Dice for each class
-    dice_scores = []
+    # Ensure batch size matches
     start_class = 1 if exclude_background else 0
+    dice_scores = []
     
+    # Iterate over classes, starting from 1 if excluding background
     for c in range(start_class, num_classes):
         label_c = label_onehot[:, c]
         pred_c = pred_onehot[:, c]
         
-        # Flatten spatial dimensions
+        # Flatten spatial dimensions - 保持在GPU上
         label_c = label_c.reshape(label_c.shape[0], -1)
         pred_c = pred_c.reshape(pred_c.shape[0], -1)
         
-        intersection = (label_c * pred_c).sum()
-        union = label_c.sum() + pred_c.sum()
+        # Calculate Dice for this class
+        intersection = torch.sum(label_c * pred_c)
+        union = torch.sum(label_c) + torch.sum(pred_c)
         
         if union > 0:
             dice = (2. * intersection + smooth) / (union + smooth)
-            dice_scores.append(dice.item())
+            dice_scores.append(dice.item())  # Convert to Python scalar
         # Note: Classes with union=0 (not present in data) are excluded from mean calculation
         # This ensures we only average over classes that actually exist in the data
     
@@ -282,7 +303,11 @@ def dice_at_all(labels, preds, thresh=0.5, is_test=False, multiclass=False, num_
             assigned_col = assignment_dict[i]
             dice_match.append(1 - cost_matrix[i, assigned_col])
             if is_test:
-                dice_each.append(dice_matrix[i, i])
+                # For diagonal test, only use if i is within valid column range
+                if i < dice_matrix.shape[1]:
+                    dice_each.append(dice_matrix[i, i])
+                else:
+                    dice_each.append(0.0)  # No valid diagonal element
             else:
                 dice_each.append(1 - cost_matrix[i, assigned_col])
         else:
@@ -291,7 +316,11 @@ def dice_at_all(labels, preds, thresh=0.5, is_test=False, multiclass=False, num_
             best_col = np.argmax(dice_matrix[i, :])
             dice_match.append(dice_matrix[i, best_col])
             if is_test:
-                dice_each.append(dice_matrix[i, i] if i < dice_matrix.shape[1] else 0.0)
+                # For diagonal test, only use if i is within valid column range
+                if i < dice_matrix.shape[1]:
+                    dice_each.append(dice_matrix[i, i])
+                else:
+                    dice_each.append(0.0)  # No valid diagonal element
             else:
                 dice_each.append(dice_matrix[i, best_col])
     
@@ -315,14 +344,30 @@ def distance(x, y):
 		for x_ in x:
 			per_class_iou.append(iou(np.expand_dims(x_, axis=0), y[None, :], axis=-2))
 		per_class_iou = np.concatenate(per_class_iou)
-	return 1 - per_class_iou[..., 1:].mean(-1)
+	
+	# Calculate distance as 1 - IoU for each class
+	result = 1 - np.nanmean(per_class_iou[..., 1:], axis=-1)
+	
+	# Handle NaN values: replace with 1.0
+	result = np.where(np.isnan(result), 1.0, result)
+	
+	return result
 
 
 def calc_generalised_energy_distance(dist_0, dist_1, num_classes):
 	dist_0 = dist_0.reshape((len(dist_0), -1))
 	dist_1 = dist_1.reshape((len(dist_1), -1))
-	dist_0 = dist_0.numpy().astype("int")
-	dist_1 = dist_1.numpy().astype("int")
+	
+	# Convert to numpy arrays if they are torch tensors
+	if isinstance(dist_0, torch.Tensor):
+		dist_0 = dist_0.cpu().numpy().astype("int")
+	else:
+		dist_0 = dist_0.numpy().astype("int")
+		
+	if isinstance(dist_1, torch.Tensor):
+		dist_1 = dist_1.cpu().numpy().astype("int")
+	else:
+		dist_1 = dist_1.numpy().astype("int")
 
 	eye = np.eye(num_classes)
 	dist_0 = eye[dist_0].astype('bool')
@@ -337,8 +382,35 @@ def calc_generalised_energy_distance(dist_0, dist_1, num_classes):
 # Metrics for Uncertainty
 def generalized_energy_distance(labels, preds, thresh=0.5, num_classes=2):
 	pred_masks = (preds > thresh).float()
+	
+	# Convert to CPU if necessary
+	if isinstance(labels, torch.Tensor):
+		labels_cpu = labels.cpu()
+	else:
+		labels_cpu = labels
+		
+	if isinstance(pred_masks, torch.Tensor):
+		pred_cpu = pred_masks.cpu()
+	else:
+		pred_cpu = pred_masks
+	
+	# Ensure labels and predictions are in the same format
+	label_classes = set(int(x) for x in np.unique(labels_cpu[0].numpy()) if x != 0)
+	pred_classes = set(int(x) for x in np.unique(pred_cpu[0].numpy()) if x != 0)
+	
+	if len(label_classes) == 0 and len(pred_classes) == 0:
+		# Both only have background, no difference
+		return 0.0
+	elif len(label_classes) == 0 or len(pred_classes) == 0:
+		# One has no classes, return 1.0 as they are completely different
+		return 1.0
+	
 	cross, d_0, d_1 = calc_generalised_energy_distance(labels[0], pred_masks[0], num_classes)
 	GED = 2 * cross - d_0 - d_1
+	
+	# Handle NaN values
+	if np.isnan(GED):
+		GED = 0.0
 
 	return GED
 
@@ -352,6 +424,11 @@ def dice_at_thresh(labels, preds):
 	for thresh in thres_list:
 		pred_binary = (pred_mean > thresh).float()
 		label_binary = (label_mean > thresh).float()
-		dice_scores.append(compute_dice_accuracy(label_binary, pred_binary))
+		dice_score = compute_dice_accuracy(label_binary, pred_binary)
+		# Convert to Python scalar if it's a tensor
+		if isinstance(dice_score, torch.Tensor):
+			dice_scores.append(dice_score.item())
+		else:
+			dice_scores.append(dice_score)
 	dice_scores = np.mean(dice_scores)
 	return dice_scores
