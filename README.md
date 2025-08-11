@@ -9,7 +9,7 @@ A specialized toolkit for evaluating medical image segmentation models against m
 uv sync
 ```
 
-### 2. Run Batch Evaluation (Easiest Method)
+### 2. Run Batch Evaluation
 For evaluating all samples at once:
 ```bash
 python competition_evaluation.py --pred_path predictions/ --gt_path MBH_val_label_2025/
@@ -17,19 +17,10 @@ python competition_evaluation.py --pred_path predictions/ --gt_path MBH_val_labe
 
 ### 3. Prepare Your Data
 
-The toolkit automatically detects your data structure and parameters. Simply organize your files and run with `--auto_config`:
+The toolkit automatically detects your data structure and parameters.
 
-#### Option A: Single prediction with multiple annotations
-```
-your_data/
-├── prediction.nii.gz              # Your model's prediction
-└── annotations/                   # Multiple rater annotations
-    ├── label_annot_1.nii.gz
-    ├── label_annot_2.nii.gz
-    └── label_annot_5.nii.gz
-```
+#### ID-based structure (like MBH dataset)
 
-#### Option B: ID-based structure (like MBH dataset)
 ```
 project/
 ├── predictions/
