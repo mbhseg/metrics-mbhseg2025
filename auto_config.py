@@ -53,7 +53,6 @@ def analyze_dataset_automatically(predictions_path: str,
                     pred_pattern = inferred_pattern
                     print(f"Pattern inferred from filename: {pred_pattern}")
                 else:
-                    # 如果没有数字后缀，使用整个文件名作为pattern
                     pred_pattern = base_name
                     print(f"Using full filename as prediction pattern: {pred_pattern}")
 
