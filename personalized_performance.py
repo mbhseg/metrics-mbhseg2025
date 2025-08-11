@@ -136,7 +136,7 @@ def evaluate_personalized_performance(predictions_path, ground_truth_path, outpu
             
             print(f"Using {DEVICE} for GPU acceleration")
             
-            # Calculate personalized performance metrics - GPU加速
+            # Calculate personalized performance metrics
             _, _, _, dice_each_iter = dice_at_all(masks_tensor, preds_tensor, thresh=0.5,
                                                   multiclass=multiclass, num_classes=num_classes,
                                                   exclude_background=exclude_background)
@@ -176,7 +176,7 @@ def evaluate_personalized_performance(predictions_path, ground_truth_path, outpu
                 preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float().to(DEVICE)
                 masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float().to(DEVICE)
                 
-                # Calculate personalized performance metrics - GPU加速
+                # Calculate personalized performance metrics
                 _, _, _, dice_each_iter = dice_at_all(masks_tensor, preds_tensor, thresh=0.5,
                                                       multiclass=multiclass, num_classes=num_classes,
                                                       exclude_background=exclude_background)
@@ -345,8 +345,8 @@ def main():
                         help='Automatically detect dataset parameters (overrides manual settings)')
     
     args = parser.parse_args()
-    
-    # 自动配置检测
+
+    # Automatic configuration detection
     if args.auto_config and not args.kfold:
         print("Using automatic configuration detection...")
         auto_config, auto_details = get_auto_config(
