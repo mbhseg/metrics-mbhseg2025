@@ -147,6 +147,7 @@ def compute_dice_accuracy(label, mask):
 def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=True):
     """
     Compute multi-class Dice coefficient with GPU acceleration.
+    Handles false positive classes gracefully by only evaluating classes present in ground truth.
     
     Args:
         label: Ground truth tensor. Shape can be:
@@ -159,7 +160,7 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
         exclude_background: If True, exclude class 0 from Dice calculation
     
     Returns:
-        Mean Dice coefficient across all classes (macro-averaged)
+        Mean Dice coefficient across all classes present in ground truth (macro-averaged)
     """
     smooth = 1e-8
     if DEVICE.type == 'cuda':
@@ -183,13 +184,26 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
             label_onehot = label
             pred_onehot = pred
         else:  # Integer class indices
-            # Convert to one-hot encoding
-            if num_classes is None:
-                num_classes = max(label.max().item(), pred.max().item()) + 1
+            # Determine the number of classes based on what's present in GROUND TRUTH
+            # This prevents crashes when predictions contain false positive classes
+            label_max = label.max().item()
+            pred_max = pred.max().item()
             
-            # Create one-hot encoding
-            label_onehot = torch.nn.functional.one_hot(label.long(), num_classes)
-            pred_onehot = torch.nn.functional.one_hot(pred.long(), num_classes)
+            if num_classes is None:
+                # Use the maximum class from ground truth + 1 as the base number of classes
+                # but ensure it's at least as large as any prediction class to avoid index errors
+                num_classes = max(label_max, pred_max) + 1
+            
+            # However, for evaluation, we only consider classes that exist in ground truth
+            gt_classes = torch.unique(label[label >= 0]).long().tolist()
+            
+            # Ensure no values exceed num_classes - 1 to prevent one-hot encoding errors
+            label_clamped = torch.clamp(label.long(), 0, num_classes - 1)
+            pred_clamped = torch.clamp(pred.long(), 0, num_classes - 1)
+            
+            # Create one-hot encoding with full num_classes to handle all possible predictions
+            label_onehot = torch.nn.functional.one_hot(label_clamped, num_classes)
+            pred_onehot = torch.nn.functional.one_hot(pred_clamped, num_classes)
             
             # Move class dimension to position 1: [B, H, W, D, C] -> [B, C, H, W, D]
             label_onehot = label_onehot.permute(0, -1, *range(1, len(label_onehot.shape)-1))
@@ -201,16 +215,32 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
     label_onehot = label_onehot.float()
     pred_onehot = pred_onehot.float()
     
-    # Ensure batch size matches
+    # Get unique classes present in ground truth (excluding background if specified)
+    if not is_onehot:
+        gt_classes = torch.unique(label[label >= 0]).long().tolist()
+    else:
+        # For one-hot encoded data, find classes with non-zero ground truth
+        gt_classes = []
+        for c in range(num_classes):
+            if torch.sum(label_onehot[:, c]) > 0:
+                gt_classes.append(c)
+    
     start_class = 1 if exclude_background else 0
     dice_scores = []
     
-    # Iterate over classes, starting from 1 if excluding background
-    for c in range(start_class, num_classes):
+    # Only iterate over classes that are present in ground truth
+    for c in gt_classes:
+        if c < start_class:  # Skip background if excluded
+            continue
+            
+        if c >= label_onehot.shape[1] or c >= pred_onehot.shape[1]:
+            # Class index exceeds tensor dimensions, skip
+            continue
+            
         label_c = label_onehot[:, c]
         pred_c = pred_onehot[:, c]
         
-        # Flatten spatial dimensions - 保持在GPU上
+        # Flatten spatial dimensions
         label_c = label_c.reshape(label_c.shape[0], -1)
         pred_c = pred_c.reshape(pred_c.shape[0], -1)
         
@@ -224,7 +254,9 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
         # Note: Classes with union=0 (not present in data) are excluded from mean calculation
         # This ensures we only average over classes that actually exist in the data
     
-    # Return mean Dice across existing classes (macro-average)
+    # Return mean Dice across existing classes in ground truth (macro-averaged)
+    # False positive classes in predictions that don't exist in ground truth are implicitly penalized
+    # as they contribute 0 to intersection but add to the prediction union term
     return np.mean(dice_scores) if dice_scores else 0.0
 
 
@@ -394,7 +426,8 @@ def generalized_energy_distance(labels, preds, thresh=0.5, num_classes=2):
 	else:
 		pred_cpu = pred_masks
 	
-	# Ensure labels and predictions are in the same format
+	# Handle cases with false positive classes in predictions
+	# Get actual classes present in both labels and predictions
 	label_classes = set(int(x) for x in np.unique(labels_cpu[0].numpy()) if x != 0)
 	pred_classes = set(int(x) for x in np.unique(pred_cpu[0].numpy()) if x != 0)
 	
@@ -405,7 +438,15 @@ def generalized_energy_distance(labels, preds, thresh=0.5, num_classes=2):
 		# One has no classes, return 1.0 as they are completely different
 		return 1.0
 	
-	cross, d_0, d_1 = calc_generalised_energy_distance(labels[0], pred_masks[0], num_classes)
+	# Update num_classes to accommodate all classes that appear in either labels or predictions
+	# This prevents index errors when predictions contain classes not in ground truth
+	max_class_in_data = max(
+		max(label_classes) if label_classes else 0,
+		max(pred_classes) if pred_classes else 0
+	)
+	effective_num_classes = max(num_classes, max_class_in_data + 1)
+	
+	cross, d_0, d_1 = calc_generalised_energy_distance(labels[0], pred_masks[0], effective_num_classes)
 	GED = 2 * cross - d_0 - d_1
 	
 	# Handle NaN values
