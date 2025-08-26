@@ -24,17 +24,17 @@ The toolkit automatically detects your data structure and parameters.
 ```
 project/
 ├── predictions/
-   ├── ID_90ae3af3_ID_8d77fcb5d2.nii.gz
+   ├── ID_90ae3af3_ID_8d77fcb5d2/
    │   ├── pred_s1.nii.gz
    │   ├── pred_s2.nii.gz
    │   ├── pred_s3.nii.gz
                ...
    │   └── pred_s10.nii.gz
-   ├── ID_066b1fc2_ID_f937d7bff0.nii.gz
+   ├── ID_066b1fc2_ID_f937d7bff0/
    │    ├── pred_s1.nii.gz
    │    ├── pred_s2.nii.gz
    │    └── pred_s10.nii.gz
-   └── ID_0219ef88_ID_e5c1a31210.nii.gz
+   └── ID_0219ef88_ID_e5c1a31210/
         ├── pred_s1.nii.gz
         ├── pred_s2.nii.gz
         └── pred_s10.nii.gz
