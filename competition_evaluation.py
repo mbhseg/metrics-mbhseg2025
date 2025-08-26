@@ -60,7 +60,8 @@ class CompetitionEvaluator:
         print("🔍 Discovering prediction files and matching ground truth...")
 
         # Get all prediction files
-        pred_files = list(self.predictions_path.glob("*.nii.gz"))
+        # pred_files = list(self.predictions_path.glob("*.nii.gz"))
+        pred_files = list([i for i in self.predictions_path.iterdir() if i.is_dir()])
         pred_files.sort()
 
         print(f"📁 Found {len(pred_files)} prediction files")
@@ -127,7 +128,8 @@ class CompetitionEvaluator:
             auto_config, _ = get_auto_config(pred_file, gt_folder, verbose=False)
 
             # Get prediction file directory (for evaluation functions)
-            pred_dir = str(Path(pred_file).parent)
+            # pred_dir = str(Path(pred_file).parent)
+            pred_dir = pred_file
 
             # Diverse Performance evaluation
             diverse_result = evaluate_diverse_performance(
