@@ -126,32 +126,38 @@ class CompetitionEvaluator:
             # Use auto_config to get parameters
             auto_config, _ = get_auto_config(pred_file, gt_folder, verbose=False)
 
-            # Get prediction file directory (for evaluation functions)
-            pred_dir = str(Path(pred_file).parent)
+            # For single file evaluation, create temporary directory with just this file
+            import tempfile
+            import shutil
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Copy single prediction file to temp directory
+                temp_pred_file = os.path.join(temp_dir, os.path.basename(pred_file))
+                shutil.copy2(pred_file, temp_pred_file)
+                
+                # Diverse Performance evaluation using temp directory
+                diverse_result = evaluate_diverse_performance(
+                    temp_dir,
+                    gt_folder,
+                    None,  # Pass directory path, output=None means don't save files
+                    pred_pattern=auto_config["pred_pattern"],
+                    gt_pattern=auto_config["gt_pattern"],
+                    multiclass=auto_config["multiclass"],
+                    num_classes=auto_config["num_classes"],
+                    exclude_background=auto_config["exclude_background"],
+                )
 
-            # Diverse Performance evaluation
-            diverse_result = evaluate_diverse_performance(
-                pred_dir,
-                gt_folder,
-                None,  # Pass directory path, output=None means don't save files
-                pred_pattern=auto_config["pred_pattern"],
-                gt_pattern=auto_config["gt_pattern"],
-                multiclass=auto_config["multiclass"],
-                num_classes=auto_config["num_classes"],
-                exclude_background=auto_config["exclude_background"],
-            )
-
-            # Personalized Performance evaluation
-            personalized_result = evaluate_personalized_performance(
-                pred_dir,
-                gt_folder,
-                None,  # Pass directory path, output=None means don't save files
-                pred_pattern=auto_config["pred_pattern"],
-                gt_pattern=auto_config["gt_pattern"],
-                multiclass=auto_config["multiclass"],
-                num_classes=auto_config["num_classes"],
-                exclude_background=auto_config["exclude_background"],
-            )
+                # Personalized Performance evaluation using same temp directory
+                personalized_result = evaluate_personalized_performance(
+                    temp_dir,
+                    gt_folder,
+                    None,  # Pass directory path, output=None means don't save files
+                    pred_pattern=auto_config["pred_pattern"],
+                    gt_pattern=auto_config["gt_pattern"],
+                    multiclass=auto_config["multiclass"],
+                    num_classes=auto_config["num_classes"],
+                    exclude_background=auto_config["exclude_background"],
+                )
 
             return diverse_result, personalized_result
 

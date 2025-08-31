@@ -21,6 +21,9 @@ def evaluate_personalized_performance(predictions_path, ground_truth_path, outpu
     - Dice_each: Dice score for each expert/annotator
     - Dice_each_mean: Mean of all individual expert Dice scores
     
+    Note: Enhanced to handle healthy cases (no lesions) fairly by evaluating background 
+    class Dice instead of returning 0, providing proper credit for correct negative predictions.
+    
     Args:
         predictions_path: Directory containing prediction files
         ground_truth_path: Directory containing ground truth files

@@ -44,8 +44,8 @@ def analyze_dataset_automatically(predictions_path: str,
         if pred_pattern not in base_name:
             # If the filename does not contain the default pattern, try to infer
             import re
-            # First try removing the trailing numbers to get the pattern
-            pattern_match = re.match(r'(.+?)(_\d+)?$', base_name)
+            # First try removing the trailing numbers to get the pattern including underscore
+            pattern_match = re.match(r'(.+_)(\d+)$', base_name)
             if pattern_match:
                 inferred_pattern = pattern_match.group(1)
                 # If the inferred pattern is reasonable (non-empty and contains characters), use it
@@ -55,6 +55,9 @@ def analyze_dataset_automatically(predictions_path: str,
                 else:
                     pred_pattern = base_name
                     print(f"Using full filename as prediction pattern: {pred_pattern}")
+            else:
+                pred_pattern = base_name
+                print(f"Using full filename as prediction pattern: {pred_pattern}")
 
         predictions_path = pred_dir
     else:
@@ -274,9 +277,10 @@ def get_auto_config(predictions_path: str,
         print_analysis_summary(params)
     
     # Return a simplified config dictionary
+    # Force multiclass mode to ensure healthy case handling works properly
     config = {
-        'multiclass': params['is_multiclass'],
-        'num_classes': params['num_classes'],
+        'multiclass': True,  # Always use multiclass mode for proper healthy case handling
+        'num_classes': max(params['num_classes'], 6),  # Ensure at least 6 classes for hemorrhage detection
         'exclude_background': params.get('exclude_background_recommended', True),
         'pred_pattern': params['detected_pred_pattern'],
         'gt_pattern': params['detected_gt_pattern']
