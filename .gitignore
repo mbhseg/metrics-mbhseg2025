@@ -144,6 +144,10 @@ metrics.md
 trial_folder/
 
 competition_results
+test_competition_results
+test_predictions
+test_single_case
 MBH_val_label_2025
+MBH_val_label_2025_consistent
 
 utils/

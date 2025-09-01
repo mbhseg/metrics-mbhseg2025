@@ -146,8 +146,11 @@ def compute_dice_accuracy(label, mask):
 
 def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=True):
     """
-    Compute multi-class Dice coefficient with GPU acceleration.
-    Handles false positive classes gracefully by only evaluating classes present in ground truth.
+    Compute multi-class Dice coefficient with proper handling for healthy cases.
+    
+    Key improvement: For healthy cases (only background class present), evaluate background 
+    class Dice to give proper credit for correct negative predictions, even when 
+    exclude_background=True.
     
     Args:
         label: Ground truth tensor. Shape can be:
@@ -157,10 +160,10 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
               - [B, H, W, D] with integer class indices  
               - [B, C, H, W, D] with one-hot encoding or probabilities
         num_classes: Number of classes (including background if not excluded)
-        exclude_background: If True, exclude class 0 from Dice calculation
+        exclude_background: If True, exclude class 0 from Dice calculation for non-healthy cases
     
     Returns:
-        Mean Dice coefficient across all classes present in ground truth (macro-averaged)
+        Mean Dice coefficient across evaluated classes
     """
     smooth = 1e-8
     if DEVICE.type == 'cuda':
@@ -215,7 +218,7 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
     label_onehot = label_onehot.float()
     pred_onehot = pred_onehot.float()
     
-    # Get unique classes present in ground truth (excluding background if specified)
+    # Get unique classes present in ground truth
     if not is_onehot:
         gt_classes = torch.unique(label[label >= 0]).long().tolist()
     else:
@@ -225,14 +228,25 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
             if torch.sum(label_onehot[:, c]) > 0:
                 gt_classes.append(c)
     
-    start_class = 1 if exclude_background else 0
+    # Check if this is a healthy case (only background class present)
+    foreground_classes = [c for c in gt_classes if c > 0]
+    is_healthy_case = len(foreground_classes) == 0
+    
+    # Determine which classes to evaluate
+    if is_healthy_case and exclude_background:
+        # Special case: healthy cases should evaluate background class for fair scoring
+        # even when exclude_background=True
+        classes_to_evaluate = [0]  # Always evaluate background for healthy cases
+        print("Healthy case detected: evaluating background class Dice for fair scoring")
+    else:
+        # Normal case: respect exclude_background setting
+        start_class = 1 if exclude_background else 0
+        classes_to_evaluate = [c for c in gt_classes if c >= start_class]
+    
     dice_scores = []
     
-    # Only iterate over classes that are present in ground truth
-    for c in gt_classes:
-        if c < start_class:  # Skip background if excluded
-            continue
-            
+    # Calculate Dice for selected classes
+    for c in classes_to_evaluate:
         if c >= label_onehot.shape[1] or c >= pred_onehot.shape[1]:
             # Class index exceeds tensor dimensions, skip
             continue
@@ -251,12 +265,10 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
         if union > 0:
             dice = (2. * intersection + smooth) / (union + smooth)
             dice_scores.append(dice.item())  # Convert to Python scalar
-        # Note: Classes with union=0 (not present in data) are excluded from mean calculation
-        # This ensures we only average over classes that actually exist in the data
     
-    # Return mean Dice across existing classes in ground truth (macro-averaged)
-    # False positive classes in predictions that don't exist in ground truth are implicitly penalized
-    # as they contribute 0 to intersection but add to the prediction union term
+    # Return mean Dice across evaluated classes
+    # For healthy cases: background Dice rewards correct negative predictions
+    # For pathological cases: standard foreground class Dice
     return np.mean(dice_scores) if dice_scores else 0.0
 
 

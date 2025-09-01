@@ -23,6 +23,9 @@ def evaluate_diverse_performance(predictions_path, ground_truth_path, output_pat
     - Dice_match: Set-level matching metric
     - Dice_max and Dice_max_reverse: Set-level maximum metrics
     
+    Note: Enhanced to handle healthy cases (no lesions) fairly by evaluating background 
+    class Dice instead of returning 0, providing proper credit for correct negative predictions.
+    
     Args:
         predictions_path: Directory containing prediction files
         ground_truth_path: Directory containing ground truth files
@@ -144,7 +147,7 @@ def evaluate_diverse_performance(predictions_path, ground_truth_path, output_pat
             preds_tensor = torch.tensor(np.stack(preds)).unsqueeze(0).float().to(DEVICE)
             masks_tensor = torch.tensor(np.stack(masks)).unsqueeze(0).float().to(DEVICE)
             
-            print(f"📊 使用 {DEVICE} 计算指标...")
+            print(f"📊 Use {DEVICE}")
             
             # Calculate metrics
             GED_global = generalized_energy_distance(masks_tensor, preds_tensor, num_classes=num_classes)
