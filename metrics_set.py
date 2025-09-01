@@ -144,7 +144,7 @@ def compute_dice_accuracy(label, mask):
     return (2. * intersection + smooth) / (m1.sum() + m2.sum() + smooth)
 
 
-def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=True):
+def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=True, fp_sensitive_healthy=True, fp_threshold=100):
     """
     Compute multi-class Dice coefficient with proper handling for healthy cases.
     
@@ -161,6 +161,8 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
               - [B, C, H, W, D] with one-hot encoding or probabilities
         num_classes: Number of classes (including background if not excluded)
         exclude_background: If True, exclude class 0 from Dice calculation for non-healthy cases
+        fp_sensitive_healthy: If True, use FP-sensitive DICE calculation for healthy cases
+        fp_threshold: Base threshold for FP-sensitive calculation (default: 100)
     
     Returns:
         Mean Dice coefficient across evaluated classes
@@ -234,10 +236,27 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
     
     # Determine which classes to evaluate
     if is_healthy_case and exclude_background:
-        # Special case: healthy cases should evaluate background class for fair scoring
-        # even when exclude_background=True
-        classes_to_evaluate = [0]  # Always evaluate background for healthy cases
-        print("Healthy case detected: evaluating background class Dice for fair scoring")
+        if fp_sensitive_healthy:
+            # FP-sensitive calculation for healthy cases
+            # Count false positive voxels (pred > 0 when label = 0)
+            if not is_onehot:
+                fp_voxels = torch.sum((pred > 0) & (label == 0)).item()
+            else:
+                # For one-hot: FP is prediction of any foreground class when label is background
+                pred_foreground = torch.sum(pred_onehot[:, 1:], dim=1)  # Sum all non-background classes
+                label_background = label_onehot[:, 0]  # Background class
+                fp_voxels = torch.sum(pred_foreground * label_background).item()
+            
+            if fp_voxels > fp_threshold:
+                return 0.0
+            else:
+                # Use formula: 2*(fp_threshold-x)/(fp_threshold+fp_threshold-x)
+                dice_fp_sensitive = (2. * (fp_threshold - fp_voxels)) / (2 * fp_threshold - fp_voxels)
+                return dice_fp_sensitive
+        else:
+            # Original logic: evaluate background class for fair scoring
+            classes_to_evaluate = [0]  # Always evaluate background for healthy cases
+            print("Healthy case detected: evaluating background class Dice for fair scoring")
     else:
         # Normal case: respect exclude_background setting
         start_class = 1 if exclude_background else 0
@@ -272,7 +291,7 @@ def compute_multiclass_dice(label, pred, num_classes=None, exclude_background=Tr
     return np.mean(dice_scores) if dice_scores else 0.0
 
 
-def dice_at_all(labels, preds, thresh=0.5, is_test=False, multiclass=False, num_classes=None, exclude_background=True):
+def dice_at_all(labels, preds, thresh=0.5, is_test=False, multiclass=False, num_classes=None, exclude_background=True, fp_sensitive_healthy=True, fp_threshold=100):
     """
     Calculate various Dice metrics for multiple predictions and labels.
     
@@ -284,6 +303,8 @@ def dice_at_all(labels, preds, thresh=0.5, is_test=False, multiclass=False, num_
         multiclass: If True, use multi-class Dice calculation
         num_classes: Number of classes for multi-class segmentation
         exclude_background: If True, exclude background class from Dice calculation
+        fp_sensitive_healthy: If True, use FP-sensitive DICE calculation for healthy cases
+        fp_threshold: Base threshold for FP-sensitive calculation
     
     Returns:
         dice_max: Maximum Dice for each prediction across all labels (mean)
@@ -318,7 +339,9 @@ def dice_at_all(labels, preds, thresh=0.5, is_test=False, multiclass=False, num_
         # Define multi-class dice function for matrix computation
         def compute_dice_fn(label, pred):
             return compute_multiclass_dice(label, pred, num_classes=num_classes, 
-                                          exclude_background=exclude_background)
+                                          exclude_background=exclude_background,
+                                          fp_sensitive_healthy=fp_sensitive_healthy,
+                                          fp_threshold=fp_threshold)
     
     dice_each = []
     dice_matrix = np.zeros([labels.shape[1], pred_masks.shape[1]])
